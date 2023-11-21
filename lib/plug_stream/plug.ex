@@ -11,24 +11,31 @@ defmodule PlugStream.Plug do
       |> put_resp_content_type("text/csv")
       |> send_chunked(200)
 
-    try do
-      Logger.info("writing header")
-      {:ok, ^conn} = chunk(conn, "id,name\n")
+    Logger.info("writing header")
+    {:ok, ^conn} = chunk(conn, "id,name\n")
 
-      Process.sleep(1000)
-      Logger.info("writing row 1")
-      {:ok, ^conn} = chunk(conn, "1,Tim\n")
+    parent = self()
 
-      Process.sleep(1000)
-      Logger.info("writing row 2")
-      {:ok, ^conn} = chunk(conn, "2,Zane\n")
+    Task.Supervisor.async_nolink(parent, fn ->
+      ref = Process.monitor(parent)
 
-      Process.sleep(1000)
-      Logger.info("writing row 3")
-      {:ok, ^conn} = chunk(conn, "3,Jim\n")
-    after
-      Logger.info("done")
-    end
+      receive do
+        {:DOWN, ^ref, :process, ^parent, reason} ->
+          Logger.info("Cleanup: #{reason}")
+      end
+    end)
+
+    Process.sleep(1000)
+    Logger.info("writing row 1")
+    {:ok, ^conn} = chunk(conn, "1,Tim\n")
+
+    Process.sleep(1000)
+    Logger.info("writing row 2")
+    {:ok, ^conn} = chunk(conn, "2,Zane\n")
+
+    Process.sleep(1000)
+    Logger.info("writing row 3")
+    {:ok, ^conn} = chunk(conn, "3,Jim\n")
 
     conn
   end
