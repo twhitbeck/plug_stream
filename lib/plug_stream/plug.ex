@@ -16,7 +16,7 @@ defmodule PlugStream.Plug do
 
     parent = self()
 
-    Task.Supervisor.async_nolink(parent, fn ->
+    Task.Supervisor.async_nolink(PlugStream.Supervisor, fn ->
       ref = Process.monitor(parent)
 
       receive do
