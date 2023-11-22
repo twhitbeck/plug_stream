@@ -11,36 +11,44 @@ defmodule PlugStream.Plug do
       |> put_resp_content_type("text/csv")
       |> send_chunked(200)
 
-    Logger.info("writing header")
+    Logger.info("Creating Process for Elasticsearch")
+    query = ""
+    {:ok, pid} = PlugStream.Process.create_for_conn(self(), query)
+
+    Logger.info("Creating stream of data")
+
+    stream =
+      Stream.resource(
+        fn -> [] end,
+        fn lines ->
+          case PlugStream.Process.get_data(pid) do
+            {:cont, line} -> {[line], lines ++ [line]}
+            {:error, :halt} -> {:halt, lines}
+          end
+        end,
+        fn lines -> lines end
+      )
+
+    Logger.info("Streaming data to connection")
     {:ok, ^conn} = chunk(conn, "id,name\n")
 
-    parent = self()
+    conn =
+      Enum.reduce_while(stream, conn, fn line, conn ->
+        IO.inspect(line, label: "sending line")
 
-    Task.Supervisor.async_nolink(PlugStream.Supervisor, fn ->
-      ref = Process.monitor(parent)
+        case chunk(conn, "#{line}\n") do
+          {:ok, conn} ->
+            {:cont, conn}
 
-      receive do
-        {:DOWN, ^ref, :process, ^parent, reason} ->
-          Logger.info("Cleanup: #{reason}")
-      end
-    end)
+          {:error, :closed} ->
+            {:halt, conn}
 
-    Process.sleep(1000)
-    Logger.info("writing row 1")
-    {:ok, ^conn} = chunk(conn, "1,Tim\n")
-
-    Process.sleep(1000)
-    Logger.info("writing row 2")
-    {:ok, ^conn} = chunk(conn, "2,Zane\n")
-
-    Process.sleep(1000)
-    Logger.info("writing row 3")
-    {:ok, ^conn} = chunk(conn, "3,Jim\n")
+          {:error, error} ->
+            Logger.error("Error chunking response: #{inspect(error)}")
+            {:halt, conn}
+        end
+      end)
 
     conn
-  end
-
-  def terminate(reason, _state) do
-    Logger.warning("#{inspect(reason)} in terminate")
   end
 end
