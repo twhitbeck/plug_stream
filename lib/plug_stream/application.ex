@@ -8,6 +8,7 @@ defmodule PlugStream.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      {DynamicSupervisor, name: PlugStream.DynamicSupervisor, strategy: :one_for_one},
       {Plug.Cowboy, scheme: :http, plug: PlugStream.Plug, options: [port: 3000]}
       # Starts a worker by calling: PlugStream.Worker.start_link(arg)
       # {PlugStream.Worker, arg}
